@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leakage Simulator — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161921;
+    --surface2: #1d2130;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0;
+    --muted: #7b8099;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --font: 'IBM Plex Mono', 'Courier New', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 32px; height: 32px; background: var(--accent);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; color: #fff; font-family: var(--font);
+  }
+  .logo-text { font-size: 14px; font-weight: 500; color: var(--text); letter-spacing: 0.5px; }
+  .logo-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  .status-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 61px); }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  .sidebar-section { margin-bottom: 8px; }
+  .sidebar-label { font-size: 9px; letter-spacing: 1.5px; color: var(--muted); padding: 0 20px 8px; text-transform: uppercase; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 20px; cursor: pointer; font-size: 12px;
+    color: var(--muted); transition: all 0.15s; border-left: 2px solid transparent;
+  }
+  .sidebar-item:hover { color: var(--text); background: var(--surface); }
+  .sidebar-item.active { color: var(--accent); background: rgba(108,99,255,0.08); border-left-color: var(--accent); }
+  .sidebar-item .tag {
+    margin-left: auto; font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    background: rgba(108,99,255,0.15); color: var(--accent);
+  }
+  .tag-warn { background: rgba(245,158,11,0.15) !important; color: var(--warn) !important; }
+  .tag-ok { background: rgba(34,197,94,0.15) !important; color: var(--success) !important; }
+
+  .main { padding: 28px 32px; overflow-y: auto; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Metric strip */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 18px;
+  }
+  .metric-label { font-size: 10px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; }
+  .metric-val { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1; }
+  .metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .metric-up { color: var(--success); }
+  .metric-down { color: var(--danger); }
+
+  /* Charts row */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 18px 20px;
+  }
+  .chart-title { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 16px; text-transform: uppercase; }
+  .chart-wrap { position: relative; height: 180px; }
+
+  /* Dataset table */
+  .table-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin-bottom: 28px;
+  }
+  .table-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .table-title { font-size: 12px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+       padding: 10px 20px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 400; }
+  td { font-size: 12px; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .badge {
+    display: inline-block; font-size: 10px; padding: 3px 8px; border-radius: 4px; font-weight: 500;
+  }
+  .badge-leak { background: rgba(239,68,68,0.15); color: #f87171; }
+  .badge-time { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .badge-imb { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .badge-pre { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .badge-over { background: rgba(236,72,153,0.15); color: #f472b6; }
+
+  .score-bar { display: flex; align-items: center; gap: 8px; }
+  .bar-track { flex: 1; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; }
+  .bar-fill { height: 4px; border-radius: 2px; background: var(--accent2); }
+  .bar-fill.low { background: var(--danger); }
+  .bar-fill.mid { background: var(--warn); }
+
+  /* Detail view */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .detail-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 18px 20px;
+  }
+  .detail-label { font-size: 10px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 10px; }
+  .detail-content { font-size: 12px; line-height: 1.7; color: var(--text); }
+  .detail-content code { color: var(--accent2); background: rgba(0,212,170,0.08); padding: 1px 5px; border-radius: 3px; }
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .tag-pill {
+    font-size: 11px; padding: 4px 10px; border-radius: 20px;
+    background: rgba(108,99,255,0.12); color: var(--accent); border: 1px solid rgba(108,99,255,0.2);
+  }
+
+  .reasoning-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 18px 20px; margin-bottom: 14px;
+    border-left: 3px solid var(--accent);
+  }
+  .reasoning-box pre { font-size: 12px; white-space: pre-wrap; line-height: 1.7; color: var(--text); font-family: var(--font); }
+
+  .detection-ring { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
+  .ring-outer {
+    width: 60px; height: 60px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 600;
+  }
+  .ring-detected { background: rgba(34,197,94,0.12); color: var(--success); border: 2px solid var(--success); }
+  .ring-missed { background: rgba(239,68,68,0.12); color: var(--danger); border: 2px solid var(--danger); }
+
+  .btn {
+    font-family: var(--font); font-size: 11px; padding: 7px 16px;
+    border-radius: 5px; cursor: pointer; border: 1px solid var(--border2);
+    background: transparent; color: var(--text); transition: all 0.15s; letter-spacing: 0.3px;
+  }
+  .btn:hover { background: var(--surface2); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-sm { padding: 4px 10px; font-size: 10px; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 32px; margin-bottom: 12px; }
+  .empty-title { font-size: 14px; color: var(--text); margin-bottom: 6px; }
+  .empty-desc { font-size: 12px; line-height: 1.6; }
+
+  .run-panel { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+  .run-input {
+    font-family: var(--font); font-size: 11px; padding: 7px 12px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 5px; color: var(--text); width: 200px;
+  }
+
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; padding: 10px 16px; font-size: 12px; color: var(--text);
+    display: none; z-index: 999;
+  }
+  .toast.show { display: block; animation: fadeIn 0.2s; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  .info-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; padding: 3px 8px; border-radius: 20px;
+    border: 1px solid var(--border2); color: var(--muted);
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .charts-row { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">LS</div>
+    <div>
+      <div class="logo-text">Leakage Simulator</div>
+      <div class="logo-sub">ML Issue Detection · LLM Evaluation</div>
+    </div>
+  </div>
+  <div class="status-bar">
+    <div class="dot" id="api-dot" style="background:var(--warn)"></div>
+    <span id="api-status">checking api…</span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <div class="sidebar-item active" onclick="showView('overview')">
+        ▦ &nbsp;Overview
+      </div>
+      <div class="sidebar-item" onclick="showView('datasets')">
+        ◫ &nbsp;Datasets <span class="tag" id="ds-count">5</span>
+      </div>
+      <div class="sidebar-item" onclick="showView('results')">
+        ◈ &nbsp;Eval Results
+      </div>
+      <div class="sidebar-item" onclick="showView('failures')">
+        ◉ &nbsp;Failure Cases
+      </div>
+      <div class="sidebar-item" onclick="showView('run')">
+        ► &nbsp;Run Experiment
+      </div>
+    </div>
+    <div class="sidebar-section" style="margin-top:16px">
+      <div class="sidebar-label">Datasets</div>
+      <div class="sidebar-item" onclick="showDataset('target_leakage')">
+        <span>target_leakage</span> <span class="tag tag-warn">leaky</span>
+      </div>
+      <div class="sidebar-item" onclick="showDataset('temporal_leakage')">
+        <span>temporal_leakage</span> <span class="tag tag-warn">time</span>
+      </div>
+      <div class="sidebar-item" onclick="showDataset('class_imbalance')">
+        <span>class_imbalance</span> <span class="tag">imb</span>
+      </div>
+      <div class="sidebar-item" onclick="showDataset('train_test_contamination')">
+        <span>tt_contam…</span> <span class="tag tag-warn">pre</span>
+      </div>
+      <div class="sidebar-item" onclick="showDataset('overfit_trap')">
+        <span>overfit_trap</span> <span class="tag">over</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <div class="view active" id="view-overview">
+      <div class="metrics" id="overview-metrics">
+        <div class="metric-card">
+          <div class="metric-label">Avg Overall Score</div>
+          <div class="metric-val" id="m-overall">—</div>
+          <div class="metric-sub" id="m-overall-sub">no data</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Detection Rate</div>
+          <div class="metric-val" id="m-detect">—</div>
+          <div class="metric-sub">issues correctly classified</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Latency</div>
+          <div class="metric-val" id="m-latency">—</div>
+          <div class="metric-sub">seconds per evaluation</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Total Tokens</div>
+          <div class="metric-val" id="m-tokens">—</div>
+          <div class="metric-sub">last experiment run</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Score breakdown by dataset</div>
+          <div class="chart-wrap"><canvas id="chart-scores"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Detection accuracy per issue type</div>
+          <div class="chart-wrap"><canvas id="chart-detect"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">Experiment Summary</span>
+          <span class="info-chip" id="run-info">no run yet</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Dataset</th>
+              <th>Issue Type</th>
+              <th>Detected</th>
+              <th>Feature F1</th>
+              <th>Reasoning</th>
+              <th>Overall</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="overview-table-body">
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">
+              No experiment data. Run an experiment first →
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DATASETS -->
+    <div class="view" id="view-datasets">
+      <div style="margin-bottom:20px">
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          5 trap datasets, each embedding a specific ML pitfall. The LLM is given only column names,
+          dtypes, summary stats, and a small sample — no ground truth labels.
+        </div>
+      </div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Issue Type</th><th>Rows</th><th>Leaky Features</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code style="color:var(--accent2)">target_leakage</code></td>
+              <td><span class="badge badge-leak">target leak</span></td>
+              <td>500</td>
+              <td><code style="color:var(--warn)">approval_score</code></td>
+              <td style="color:var(--muted);font-size:11px">Loan approval — score derived post-hoc from label</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--accent2)">temporal_leakage</code></td>
+              <td><span class="badge badge-time">temporal</span></td>
+              <td>600</td>
+              <td><code style="color:var(--warn)">rolling_30d_avg</code></td>
+              <td style="color:var(--muted);font-size:11px">Sales time-series — rolling avg uses future data</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--accent2)">class_imbalance</code></td>
+              <td><span class="badge badge-imb">imbalance</span></td>
+              <td>1000</td>
+              <td>—</td>
+              <td style="color:var(--muted);font-size:11px">Fraud: 99:1 ratio, accuracy illusion &gt;99%</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--accent2)">train_test_contamination</code></td>
+              <td><span class="badge badge-pre">preprocessing</span></td>
+              <td>400</td>
+              <td><code style="color:var(--warn)">feature_a_scaled, feature_b_scaled</code></td>
+              <td style="color:var(--muted);font-size:11px">Scaler fitted on full data before split</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--accent2)">overfit_trap</code></td>
+              <td><span class="badge badge-over">overfitting</span></td>
+              <td>150</td>
+              <td>—</td>
+              <td style="color:var(--muted);font-size:11px">150 samples, 52 features (50 noise)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="view" id="view-results">
+      <div id="results-content">
+        <div class="empty-state">
+          <div class="empty-icon">◈</div>
+          <div class="empty-title">No evaluation results yet</div>
+          <div class="empty-desc">Run an experiment from the "Run Experiment" tab<br>or via <code>python src/runner.py</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAILURES -->
+    <div class="view" id="view-failures">
+      <div id="failures-content">
+        <div class="empty-state">
+          <div class="empty-icon">◉</div>
+          <div class="empty-title">No failure cases to show</div>
+          <div class="empty-desc">After running an experiment, missed detections appear here.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RUN -->
+    <div class="view" id="view-run">
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">
+          Trigger a new experiment. The backend calls LLM engine (here I am using Qwen3-32b) for each dataset
+          and logs results to <code style="color:var(--accent2)">experiments/</code> and MLflow.
+        </div>
+        <div class="run-panel">
+          <input class="run-input" id="seed-input" type="number" value="42" placeholder="seed">
+          <button class="btn btn-primary" onclick="triggerRun()">► Run Experiment</button>
+          <button class="btn" onclick="loadLatest()">↻ Refresh Results</button>
+          <span id="run-spinner" style="display:none"><span class="spinner"></span> &nbsp;running…</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          Or from terminal: <code style="color:var(--accent2)">cd src && python runner.py --seed 42</code>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header"><span class="table-title">Recent Runs</span></div>
+        <table>
+          <thead><tr><th>Run ID</th><th>Datasets</th><th>Avg Score</th><th>Tokens</th></tr></thead>
+          <tbody id="runs-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DATASET DETAIL -->
+    <div class="view" id="view-dataset-detail">
+      <div style="margin-bottom:16px">
+        <button class="btn btn-sm" onclick="showView('datasets')">← back</button>
+      </div>
+      <div id="dataset-detail-content"></div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:5050/api';
+let latestData = null;
+let scoreChart = null, detectChart = null;
+
+async function api(path, opts) {
+  try {
+    const r = await fetch(API + path, opts);
+    return await r.json();
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(i => {
+    if (i.textContent.toLowerCase().includes(name.replace('-','').replace('_',''))) {
+      i.classList.add('active');
+    }
+  });
+}
+
+function showDataset(name) {
+  const result = latestData?.results?.find(r => r.dataset === name);
+  const el = document.getElementById('dataset-detail-content');
+  if (!result) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">◫</div>
+      <div class="empty-title">No eval data for <code>${name}</code></div>
+      <div class="empty-desc">Run an experiment to see LLM evaluation results.</div></div>`;
+  } else {
+    const s = result.scores || {};
+    const llm = result.llm_response || {};
+    const gt = result.ground_truth || {};
+    const detected = s.issue_detected === 1;
+    el.innerHTML = `
+      <div class="detection-ring">
+        <div class="ring-outer ${detected?'ring-detected':'ring-missed'}">${detected?'✓':'✗'}</div>
+        <div>
+          <div style="font-size:14px;font-weight:500;color:var(--text)">${name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${result.description||''}</div>
+        </div>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-card">
+          <div class="detail-label">Ground Truth</div>
+          <div class="detail-content">
+            ${Object.entries(gt).map(([k,v]) =>
+              `<div style="margin-bottom:6px"><span style="color:var(--muted)">${k}:</span> <code>${Array.isArray(v)?v.join(', '):v}</code></div>`
+            ).join('')}
+          </div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-label">LLM Response</div>
+          <div class="detail-content">
+            <div style="margin-bottom:6px"><span style="color:var(--muted)">detected type:</span> <code>${llm.issue_type||'—'}</code></div>
+            <div style="margin-bottom:6px"><span style="color:var(--muted)">severity:</span> <code>${llm.severity||'—'}</code></div>
+            <div style="margin-bottom:6px"><span style="color:var(--muted)">confidence:</span> <code>${llm.confidence!=null?(llm.confidence*100).toFixed(0)+'%':'—'}</code></div>
+            <div style="margin-bottom:6px"><span style="color:var(--muted)">leaky features:</span></div>
+            <div class="tag-list">${(llm.leaky_features||[]).map(f=>`<span class="tag-pill">${f}</span>`).join('')||'<span style="color:var(--muted)">none</span>'}</div>
+          </div>
+        </div>
+      </div>
+      <div class="reasoning-box">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:10px">LLM Reasoning</div>
+        <pre>${llm.reasoning||'(no reasoning captured)'}</pre>
+      </div>
+      <div class="detail-card" style="margin-bottom:14px">
+        <div class="detail-label">Recommended Fixes</div>
+        <div class="tag-list">
+          ${(llm.recommended_fixes||[]).map(f=>`<span class="tag-pill" style="border-radius:4px">${f}</span>`).join('')||'—'}
+        </div>
+      </div>
+      <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
+        ${[
+          ['Issue Detected', s.issue_detected===1?'Yes':'No', s.issue_detected===1?'var(--success)':'var(--danger)'],
+          ['Feature Precision', ((s.feature_precision||0)*100).toFixed(0)+'%', 'var(--text)'],
+          ['Overall Score', ((s.overall||0)*100).toFixed(0)+'%', 'var(--accent)'],
+        ].map(([l,v,c])=>`<div class="metric-card">
+          <div class="metric-label">${l}</div>
+          <div class="metric-val" style="font-size:20px;color:${c}">${v}</div>
+        </div>`).join('')}
+      </div>
+    `;
+  }
+  showView('dataset-detail');
+}
+
+function toast(msg, dur=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function badgeClass(type) {
+  return {
+    target_leakage: 'badge-leak', temporal_leakage: 'badge-time',
+    class_imbalance: 'badge-imb', preprocessing_leakage: 'badge-pre',
+    overfitting: 'badge-over',
+  }[type] || '';
+}
+
+function scoreColor(v) {
+  if (v >= 0.7) return 'var(--success)';
+  if (v >= 0.4) return 'var(--warn)';
+  return 'var(--danger)';
+}
+
+function renderOverview(data) {
+  latestData = data;
+  const results = (data.results || []).filter(r => r.scores);
+
+  // Metrics
+  const avg = v => results.length ? (results.reduce((a,r)=>a+(r.scores[v]||0),0)/results.length) : 0;
+  document.getElementById('m-overall').textContent = (avg('overall')*100).toFixed(0) + '%';
+  document.getElementById('m-overall-sub').style.color = scoreColor(avg('overall'));
+  document.getElementById('m-detect').textContent = (avg('issue_detected')*100).toFixed(0) + '%';
+  const lats = results.map(r=>r.latency_s||0);
+  document.getElementById('m-latency').textContent = lats.length ? (lats.reduce((a,b)=>a+b,0)/lats.length).toFixed(2)+'s' : '—';
+  document.getElementById('m-tokens').textContent = data.total_tokens?.toLocaleString() || '—';
+  document.getElementById('run-info').textContent = 'run ' + (data.run_id || '—');
+
+  // Table
+  const tbody = document.getElementById('overview-table-body');
+  tbody.innerHTML = results.map(r => {
+    const s = r.scores;
+    const ov = (s.overall||0);
+    const fclass = ov >= 0.7 ? '' : ov >= 0.4 ? 'mid' : 'low';
+    return `<tr>
+      <td><code style="color:var(--accent2);font-size:11px">${r.dataset}</code></td>
+      <td><span class="badge ${badgeClass(r.issue_type)}">${r.issue_type}</span></td>
+      <td style="color:${s.issue_detected?'var(--success)':'var(--danger)'}">${s.issue_detected?'✓ yes':'✗ no'}</td>
+      <td>${((s.feature_precision||0)*100).toFixed(0)}%</td>
+      <td>${((s.reasoning_score||0)*100).toFixed(0)}%</td>
+      <td>
+        <div class="score-bar">
+          <div class="bar-track"><div class="bar-fill ${fclass}" style="width:${(ov*100).toFixed(0)}%"></div></div>
+          <span style="font-size:11px;min-width:32px;color:${scoreColor(ov)}">${(ov*100).toFixed(0)}%</span>
+        </div>
+      </td>
+      <td><button class="btn btn-sm" onclick="showDataset('${r.dataset}')">detail →</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">No results yet</td></tr>';
+
+  // Charts
+  const labels = results.map(r => r.dataset.replace('_','\n'));
+  const colors = ['#6c63ff','#00d4aa','#f59e0b','#60a5fa','#f472b6'];
+
+  if (scoreChart) scoreChart.destroy();
+  scoreChart = new Chart(document.getElementById('chart-scores'), {
+    type: 'bar',
+    data: {
+      labels: results.map(r => r.dataset.split('_').slice(0,2).join('_')),
+      datasets: [
+        { label: 'Overall', data: results.map(r => ((r.scores.overall||0)*100).toFixed(1)), backgroundColor: '#6c63ff88', borderColor: '#6c63ff', borderWidth: 1 },
+        { label: 'Reasoning', data: results.map(r => ((r.scores.reasoning_score||0)*100).toFixed(1)), backgroundColor: '#00d4aa44', borderColor: '#00d4aa', borderWidth: 1 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: '#7b8099', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#7b8099', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#7b8099', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, max: 100 }
+      }
+    }
+  });
+
+  if (detectChart) detectChart.destroy();
+  detectChart = new Chart(document.getElementById('chart-detect'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Detected', 'Missed'],
+      datasets: [{
+        data: [
+          results.filter(r=>r.scores.issue_detected===1).length,
+          results.filter(r=>r.scores.issue_detected===0).length,
+        ],
+        backgroundColor: ['#22c55e88', '#ef444488'],
+        borderColor: ['#22c55e', '#ef4444'],
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#7b8099', font: { size: 11 } } } }
+    }
+  });
+
+  // Results view
+  document.getElementById('results-content').innerHTML = results.map(r => {
+    const llm = r.llm_response || {};
+    return `<div class="detail-card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span class="badge ${badgeClass(r.issue_type)}">${r.issue_type}</span>
+        <code style="color:var(--accent2);font-size:12px">${r.dataset}</code>
+        <span style="margin-left:auto;font-size:11px;color:${scoreColor(r.scores.overall||0)}">${((r.scores.overall||0)*100).toFixed(0)}% overall</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">
+        ${llm.reasoning ? llm.reasoning.slice(0,250)+'…' : '(no reasoning)'}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-title">No results</div></div>';
+
+  // Failures view
+  const failures = results.filter(r => r.scores.issue_detected === 0);
+  document.getElementById('failures-content').innerHTML = failures.length
+    ? failures.map(r => `<div class="reasoning-box" style="margin-bottom:14px;border-left-color:var(--danger)">
+        <div style="font-size:11px;color:var(--danger);margin-bottom:8px">✗ MISSED — ${r.dataset}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Expected: <code style="color:var(--text)">${r.scores.expected_issue_type}</code> &nbsp;|&nbsp; Got: <code style="color:var(--danger)">${r.scores.predicted_issue_type}</code></div>
+        <pre style="font-size:11px;color:var(--muted)">${(r.llm_response?.reasoning||'').slice(0,400)}</pre>
+      </div>`).join('')
+    : '<div class="empty-state"><div class="empty-icon" style="color:var(--success)">✓</div><div class="empty-title">No failures!</div><div class="empty-desc">All issues were detected correctly.</div></div>';
+}
+
+async function loadLatest() {
+  const data = await api('/latest');
+  if (data.error) { toast('No data: ' + data.error); return; }
+  renderOverview(data);
+  toast('Results loaded ✓');
+}
+
+async function loadRuns() {
+  const runs = await api('/runs');
+  const tbody = document.getElementById('runs-table');
+  if (!Array.isArray(runs) || runs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">No runs yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = runs.map(r => `<tr>
+    <td><code style="font-size:11px;color:var(--accent2)">${r.run_id}</code></td>
+    <td>${r.n_results}</td>
+    <td style="color:${scoreColor(r.avg_score)}">${(r.avg_score*100).toFixed(0)}%</td>
+    <td>${r.total_tokens?.toLocaleString()}</td>
+  </tr>`).join('');
+}
+
+async function triggerRun() {
+  const seed = parseInt(document.getElementById('seed-input').value) || 42;
+  const spinner = document.getElementById('run-spinner');
+  spinner.style.display = 'inline';
+  const data = await api('/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({seed}) });
+  if (data.error) { spinner.style.display = 'none'; toast('Error: ' + data.error); return; }
+  toast(`Experiment started (PID ${data.pid}). Polling for results…`);
+  loadRuns();
+  // Poll every 5s until new results appear
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    const res = await api('/latest');
+    if (!res.error) {
+      clearInterval(poll);
+      spinner.style.display = 'none';
+      renderOverview(res);
+      toast('Results loaded ✓');
+      loadRuns();
+    }
+    if (attempts >= 24) { clearInterval(poll); spinner.style.display = 'none'; toast('Timed out — click Refresh manually'); }
+  }, 5000);
+}
+
+async function checkStatus() {
+  const data = await api('/status');
+  const dot = document.getElementById('api-dot');
+  const txt = document.getElementById('api-status');
+  if (data.status === 'ok') {
+    dot.style.background = 'var(--success)';
+    txt.textContent = 'api connected';
+  } else {
+    dot.style.background = 'var(--danger)';
+    txt.textContent = 'api offline — run: python src/app.py';
+  }
+}
+
+// Init
+checkStatus();
+loadRuns();
+loadLatest();
+</script>
+</body>
+</html>
