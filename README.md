@@ -70,4 +70,4 @@ See `reports/REPORT.md` for full technical writeup.
 
 
 <img width="1886" height="930" alt="Leakage Simulator Dashboard" src="https://github.com/user-attachments/assets/74d3c184-9f45-46cb-bf7c-55344dd8eb4d" />
-**Figure:** Leakage Simulator Dashboard
+<p align="center"> <i><strong>Figure: Leakage Simulator Dashboard</strong></i> </p>
